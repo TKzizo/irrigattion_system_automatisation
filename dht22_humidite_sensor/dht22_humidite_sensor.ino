@@ -1,3 +1,5 @@
+/*****************************************************/
+/***************** Calling Libraries *****************/
 #include <DHT.h> // include DHT library
 #include <Wire.h> // include Arduino Wire library
 #include "Ultrasonic.h" // include Seeed Studio ultrasonic ranger library
@@ -5,51 +7,53 @@
 #include <WiFiNINA.h> // include WiFi NINA module library
 //#include "secret.h"
 
-//Constants
+
+/******************************************************************/
+/***************** Constants and Global Variables *****************/
+// Constants
 #define ID  3 // Arduino unique ID
 #define DHTPIN  1 // data PIN DHT-22 is connected to
 #define SoilsensorPin A0 // data PIN Soil Moisture Sensor is connected to
+#define SoilPinOut 5 // Setup the Arduino output pin for the soil sensor
 #define DHTTYPE DHT22 // DHT Type: 22 (AM2302)
 #define RANGERPIN 2 // define ultrasonic ranger data pin
+#define RelayPin1 3 // define The 1st relay output pin
+#define RelayPin2 4 // define the 2nd relay output pin
+
+// Global Variables
+char ssid[] = "GoTan.13"; // Wifi name (SSID)
+char pass[] = "test1234"; // Wifi password
+const char serverAddress[] = "192.168.43.215";  // The Web Server (RaspBerry PI) IP address
+int port = 8000; // The Web Server (RaspBerry PI) Port number
 
 // Air sensor
 float air_hum;  //Stores humidity value
 float air_temp; //Stores temperature value
+float MaxTemp = 30.0; // Max temperature
+DHT dht(DHTPIN, DHTTYPE); // Initialize DHT sensor for normal 16mhz Arduino
 
-// Globals
-char ssid[] = "GoTan.13";
-char pass[] = "";
-const char serverAddress[] = "192.168.43.215";  // Server address
-int port = 8000; // Port number
-
-// Initialize DHT sensor for normal 16mhz Arduino
-DHT dht(DHTPIN, DHTTYPE);
-
-// initialize WiFi and HTTP Clients
-WiFiClient wifi;
-HttpClient client = HttpClient(wifi, serverAddress, port);
+WiFiClient wifi; // Initialize WiFi module
+HttpClient client = HttpClient(wifi, serverAddress, port); // Initialize HTTP (Web) Client
 int status = WL_IDLE_STATUS;
 
-// initialize ultrasonic library
+// Initialize ultrasonic library
 Ultrasonic ultrasonic(RANGERPIN);
 // Water Stock dimensions
 int radius = 4;
 int height = 9;
 int consumed; // Consumed water
 
-
 // Soil sensor
-float SoilsensorValue;
-int SoilLimit = 300;
-int soil_hum = 30;  // Soil humidity
-int soil_temp = 20; // Soil temperature
+int SoilsensorValue = 0;
+int SoilLimit = 600;
 
+/******************************************************/
+/***************** The SETUP Function *****************/
+/******************************************************/
 void setup() {
 
   Serial.begin(9600);
-  while(!Serial);
-
-  while (status != WL_CONNECTED) {
+  while(status != WL_CONNECTED) {
     Serial.print("Attempting to connect to Network named: ");
     Serial.println(ssid); // print the network name (SSID)
     status = WiFi.begin(ssid, pass);  // Connect to WPA/WPA2 network
@@ -67,19 +71,28 @@ void setup() {
   // Start the Air sensor (DHT22)
   dht.begin();
   // Setup the Arduino output pin for the soil sensor
-  pinMode(13, OUTPUT);
+  pinMode(SoilPinOut, OUTPUT);
+  // Setup the 2 relay module output pin
+  pinMode(RelayPin1, OUTPUT);
+  //pinMode(RelayPin2, OUTPUT);
 }
+/******************************************************/
 
+/***************** The Loop Function ******************/
+/******************************************************/
 void loop() {
   sensor_air();
   sensor_water();
   sensor_soil();
-  post_request();
+  //post_request();
   lance_pompe();
 }
+/******************************************************/
 
+/******************************************************/
+/***************** Sensors Functions ******************/
+/******************************************************/
 void sensor_air() {
-  // int chk; 
   delay(2000);
   //Read data from Air sensor (DHT22) and store it to variables hum and temp
   air_hum = dht.readHumidity();
@@ -95,15 +108,13 @@ void sensor_air() {
 void sensor_water() {
   char _buffer[7];
   int centimeters;
-  int inches;
 
-  // get distance in centimeters
-  centimeters = ultrasonic.MeasureInCentimeters();
+  centimeters = ultrasonic.MeasureInCentimeters(); // get distance in centimeters
   delay(250); // wait 250 milliseconds between readings
 
-  // print distance in cm
+  // Print the distance in centimeters between the Ultrasonic sensor and water to the Serial monitor
   sprintf(_buffer, "%03u cm", centimeters);
-  consumed = (centimeters * radius * radius);
+  consumed = (centimeters * radius * radius * 3.14); // The consumed water amount
   Serial.print("\rDistance: ");
   Serial.println(_buffer);  // print distance (in cm) on serial monitor
 }
@@ -115,41 +126,40 @@ void sensor_water() {
   *    thicken the pcb 
   */
 void sensor_soil() {
-
   SoilsensorValue = analogRead(SoilsensorPin); 
-  Serial.println("Soil humidite: ");
+  Serial.print("Soil humidite: ");
   Serial.println(SoilsensorValue);
  
   if (SoilsensorValue < SoilLimit) {
-    digitalWrite(13, HIGH); 
+    digitalWrite(SoilPinOut, HIGH); 
   } else {
-    digitalWrite(13, LOW); 
+    digitalWrite(SoilPinOut, LOW); 
   }
-  delay(1000);
 }
+/**********************************************************/
 
+/***************** Pump control Function ******************/
 void lance_pompe() {
-  if(air_temp > 30 && soil_hum < 50.0) {
-    // lancer la pompe
+  if(air_temp > MaxTemp || SoilsensorValue > SoilLimit) {
+    digitalWrite(RelayPin1, LOW);
   } else {
-    // arreter la pompe
+    digitalWrite(RelayPin1, HIGH);
   }
 }
+/******************************************************************/
 
+/***************** Server communication Function ******************/
 void post_request() {
   String path = "/";
   String contentType = "application/json";
+ 
+  // Assemble the body of the POST message in the form:
+  // {"id":"<ID>","info":{"water":"<value>","air":"<Value>","soil":"<Value>"}}
 
-  // id=ID; info=air-water-soil 
-  // assemble the body of the POST message:
-  String postData = "{\"id\":\""; 
-  postData += String(ID);
-  postData += "\",\"info\":{\"water\":\"";
-  postData += String(12);
-  postData += "\",\"air\":\"";
-  postData += String(11);
-  postData += "\",\"soil\":\"";
-  postData += String(soil_hum);
+  String postData = "{\"id\":\""; postData += String(ID);
+  postData += "\",\"info\":{\"water\":\""; postData += String(12);
+  postData += "\",\"air\":\""; postData += String(11);
+  postData += "\",\"soil\":\""; postData += String(SoilsensorValue);
   postData += "\"}}";
 
   Serial.println(postData); // Print the body of the POST message
@@ -160,6 +170,7 @@ void post_request() {
   // read the status code and body of the response:
   int statusCode = client.responseStatusCode();
   String response = client.responseBody();
+  
   // Print the status code and body of the response from the web server:
   Serial.print("Status code: ");
   Serial.println(statusCode);
@@ -168,3 +179,5 @@ void post_request() {
 
   delay(5000);
 }
+/******************************************************************/
+/******************************************************************/
