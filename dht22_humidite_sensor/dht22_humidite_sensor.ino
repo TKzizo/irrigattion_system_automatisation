@@ -39,12 +39,12 @@ int status = WL_IDLE_STATUS;
 // Initialize ultrasonic library
 Ultrasonic ultrasonic(RANGERPIN);
 // Water Stock dimensions
-int radius = 4;
+int radius = 2;
 int height = 9;
 int consumed; // Consumed water
 
 // Soil sensor
-int SoilsensorValue = 0;
+int SoilsensorValue = 1023;
 int SoilLimit = 600;
 
 /******************************************************/
@@ -117,6 +117,9 @@ void sensor_water() {
   consumed = (centimeters * radius * radius * 3.14); // The consumed water amount
   Serial.print("\rDistance: ");
   Serial.println(_buffer);  // print distance (in cm) on serial monitor
+  Serial.print("\rConsumed: ");
+  Serial.print(consumed * 0.001);
+  Serial.println(" Litre");
 }
 
 /**
@@ -128,7 +131,8 @@ void sensor_water() {
 void sensor_soil() {
   SoilsensorValue = analogRead(SoilsensorPin); 
   Serial.print("Soil humidite: ");
-  Serial.println(SoilsensorValue);
+  Serial.print(100 - (SoilsensorValue * 100 / 1023));
+  Serial.println(" %");
  
   if (SoilsensorValue < SoilLimit) {
     digitalWrite(SoilPinOut, HIGH); 
