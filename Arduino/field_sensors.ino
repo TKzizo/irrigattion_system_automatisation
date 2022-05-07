@@ -5,7 +5,8 @@
 #include "Ultrasonic.h" // include Seeed Studio ultrasonic ranger library
 #include <ArduinoHttpClient.h> // include Arduino HTTP Client library
 #include <WiFiNINA.h> // include WiFi NINA module library
-//#include "secret.h"
+#include <Arduino_JSON.h> // use json functions
+//#include "secret.h"  //  SSID and Password
 
 
 /******************************************************************/
@@ -21,10 +22,10 @@
 #define RelayPin2 4 // define the 2nd relay output pin
 
 // Global Variables
-char ssid[] = "GoTan.13"; // Wifi name (SSID)
-char pass[] = "test1234"; // Wifi password
-const char serverAddress[] = "192.168.43.215";  // The Web Server (RaspBerry PI) IP address
-int port = 8000; // The Web Server (RaspBerry PI) Port number
+char ssid[] = "SSID"; // Wifi name (SSID)
+char pass[] = "PASSWORD"; // Wifi password
+const char serverAddress[] = "IP";  // The Web Server (RaspBerry PI) IP address
+int port = "PORT" ; // The Web Server (RaspBerry PI) Port number
 
 // Air sensor
 float air_hum;  //Stores humidity value
@@ -45,6 +46,7 @@ int consumed; // Consumed water
 
 // Soil sensor
 int SoilsensorValue = 1023;
+int SoilValue;
 int SoilLimit = 600;
 
 /******************************************************/
@@ -131,7 +133,8 @@ void sensor_water() {
 void sensor_soil() {
   SoilsensorValue = analogRead(SoilsensorPin); 
   Serial.print("Soil humidite: ");
-  Serial.print(100 - (SoilsensorValue * 100 / 1023));
+  SoilValue = 100 - (SoilsensorValue * 100 / 1023);
+  Serial.print(SoilValue);
   Serial.println(" %");
  
   if (SoilsensorValue < SoilLimit) {
@@ -154,28 +157,28 @@ void lance_pompe() {
 
 /***************** Server communication Function ******************/
 void post_request() {
+
+  JSONVar thepost;
+
   String path = "/";
   String contentType = "application/json";
- 
-  // Assemble the body of the POST message in the form:
-  // {"id":"<ID>","info":{"water":"<value>","air":"<Value>","soil":"<Value>"}}
-
-  String postData = "{\"id\":\""; postData += String(ID);
-  postData += "\",\"info\":{\"water\":\""; postData += String(12);
-  postData += "\",\"air\":\""; postData += String(11);
-  postData += "\",\"soil\":\""; postData += String(SoilsensorValue);
-  postData += "\"}}";
-
-  Serial.println(postData); // Print the body of the POST message
-
+  
+  thepost["id"] = ID;
+  thepost["info"]["air"]["hum"] = air_hum;
+  thepost["info"]["air"]["temp"] = air_temp;
+  thepost["info"]["water"] = consumed;
+  thepost["info"]["soil"] = SoilValue;
+  Serial.println(thepost);
   Serial.println("making POST request");
-  client.post(path, contentType, postData); // send the POST request
 
-  // read the status code and body of the response:
+  // send the POST request
+  
+  client.post(path, contentType, JSON.stringify(thepost));
+
+  // read the status code and body of the response
   int statusCode = client.responseStatusCode();
   String response = client.responseBody();
   
-  // Print the status code and body of the response from the web server:
   Serial.print("Status code: ");
   Serial.println(statusCode);
   Serial.print("Response: ");

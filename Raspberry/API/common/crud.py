@@ -19,8 +19,8 @@ def close_connection(conn):
 
 
 def insert_sensors_values(conn,values):
-    sql = """ INSERT INTO arduino_sensors (id,date,air,water,soil) 
-              VALUES(?,datetime("now"),?,?,?)
+    sql = """ INSERT INTO arduino_sensors (id,date,air_hum,air_temp,water,soil) 
+              VALUES(?,datetime("now"),?,?,?,?)
           """
 
     cur = conn.cursor()
